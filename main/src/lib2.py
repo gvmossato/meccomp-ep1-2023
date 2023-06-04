@@ -338,8 +338,8 @@ class Tunnel:
         fig.show()
 
     def _plot_V(self):
-        title = "Distribuição de Velocidades"
-        zlabel = "Velocidade (m/s)"
+        title = "Função de Corrente do Escoamento"
+        zlabel = "Ψ"
         V_grid = self.get_attribute_value_matrix('V')
 
         fig = go.Figure(data=[go.Surface(
@@ -355,9 +355,9 @@ class Tunnel:
                 color ='lightgreen',
                 highlightcolor="limegreen",
                 width=3,
-                start=1,
+                start=0.5,
                 end=np.max(V_grid),
-                size=4,
+                size=2,
             )
         )
         return fig, title, zlabel
@@ -375,8 +375,8 @@ class Tunnel:
             title = title,
             showlegend = False,
             scene = dict(
-                xaxis = dict(title="x (m)"),
-                yaxis = dict(title="y (m)"),
+                xaxis = dict(title="x"),
+                yaxis = dict(title="y"),
                 zaxis = dict(title=zlabel),
             )
         )

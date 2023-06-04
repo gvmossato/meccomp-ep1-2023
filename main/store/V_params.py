@@ -101,7 +101,7 @@ irregs = {
         ],
     },
     "l": {
-        "color": "#153010", # Verde Musgo
+        "color": "#82AEFF", # Vinho
         "coeffs": lambda T, n: [
             T.h_x**2 * n.a / (2 * (T.h_x**2*n.a + T.h_y**2)),       # j+1
             T.h_y**2 * n.a / ((n.a+1) * (T.h_x**2*n.a + T.h_y**2)), # i+1
@@ -114,7 +114,7 @@ irregs = {
 
 corners = {
     'tl': {
-        "color": "#A37F36", # Beje
+        "color": "#C9B389", # Beje
         "coeffs": lambda T, n: [
             0,                                              # j+1
             T.h_y**2 / (T.h_x**2 + T.h_y**2),               # i+1
@@ -124,7 +124,7 @@ corners = {
         ],
     },
     'tr': {
-        "color": "#30FF72", # Verde Água
+        "color": "#804800", # Marrom
         "coeffs": lambda T, n: [
             0,                                              # j+1
             0,                                              # i+1
