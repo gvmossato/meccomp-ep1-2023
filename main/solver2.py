@@ -10,18 +10,18 @@ from main.src.lib2 import Tunnel
 def solve(item):
     if item == 'a':
         x_ranges = [
-            [0.03, 0.11, 0.010],
-            [0.03, 0.11, 0.005],
-            [0.03, 0.11, 0.001]
+            [0.00, 6.00, 0.10],
+            [0.00, 6.00, 0.05],
+            [0.00, 6.00, 0.02],
         ]
         y_ranges = [
-            [0.0, 40.0, 2.0],
-            [0.0, 40.0, 1.0],
-            [0.0, 40.0, 0.5],
+            [0.00, 6.00, 0.10],
+            [0.00, 6.00, 0.05],
+            [0.00, 6.00, 0.02],
         ]
     else:
-        x_ranges = [[0.00, 6.00, 0.1]]
-        y_ranges = [[0.00, 6.00, 0.1]]
+        x_ranges = [[0.00, 6.00, 0.05]]
+        y_ranges = [[0.00, 6.00, 0.05]]
 
     for x_range, y_range in zip(x_ranges, y_ranges):
         print('\033[F', end='')
@@ -44,15 +44,11 @@ def solve(item):
             else: break
             tunnel.plot_meshgrid(choosen_meshgrid)
 
+        if item == 'a': return
+
         print('\nCalculando e plotando a distribuição de velocidades:')
         tunnel.apply_liebmann_for('V', 1.85, 0.01)
         tunnel.plot('V')
-
-    #     if item == 'a':
-    #         input(f"\nPressione {ctext('ENTER', 'g')} para continuar\r")
-
-    # if item == 'a':
-    #     return
 
     # input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
 
