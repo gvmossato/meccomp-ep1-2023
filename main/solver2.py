@@ -20,8 +20,8 @@ def solve(item):
             [0.00, 6.00, 0.025],
         ]
     else:
-        x_ranges = [[0.00, 6.00, 0.050]]
-        y_ranges = [[0.00, 6.00, 0.050]]
+        x_ranges = [[0.00, 6.00, 0.1]]#050]]
+        y_ranges = [[0.00, 6.00, 0.1]]#050]]
 
     for x_range, y_range in zip(x_ranges, y_ranges):
         print('\033[F', end='')
@@ -33,35 +33,46 @@ def solve(item):
         print(f"\n{ctext('Meshgrids inicializadas!', 'g')}")
 
         if item == 'a':
-            tunnel.plot_meshgrid('V')
+            tunnel.plot_meshgrid('C')
             continue
 
         while True:
-            print(f"{ctext('V.', 'c')} Contornos para velocidade")
+            print(f"{ctext('C.', 'c')} Corrente de escoamento")
+            print(f"{ctext('u.', 'c')} Componente horizontal da velocidade")
+            print(f"{ctext('v.', 'c')} Componente vertical da velocidade")
 
             choosen_meshgrid = validate_input(
-                f"Entre com {ctext('V', 'c')} ou pressione {ctext('ENTER', 'g')} para continuar: ",
-                ['v', 'ENTER'],
+                f"Entre com {ctext('C', 'c')}, {ctext('u', 'c')}, {ctext('v', 'c')} ou pressione {ctext('ENTER', 'g')} para continuar: ",
+                ['c', 'u', 'v', 'ENTER'],
                 'ENTER'
             )
-            if choosen_meshgrid in ['v']: choosen_meshgrid = choosen_meshgrid.upper()
+
+            if choosen_meshgrid in ['c']: choosen_meshgrid = choosen_meshgrid.upper()
+            elif choosen_meshgrid in ['u', 'v']: pass
             else: break
+
             tunnel.plot_meshgrid(choosen_meshgrid)
 
-        print('\nCalculando e plotando a distribuição de velocidades:')
-        tunnel.apply_liebmann_for('V', 1.85, 0.01)
-        tunnel.plot('V')
+        print('\nCalculando e plotando a corrente de escoamento...')
+        tunnel.apply_liebmann_for('C', 1.85, 0.01)
+        tunnel.plot('C')
 
     if item == 'a': return
 
-    # input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
+    input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
 
-    # print('\033[F', end='')
-    # print('Calculando e plotando a densidade de corrente...')
-    # plate.calculate_flux('J')
-    # plate.plot('J')
+    print('\033[F', end='')
+    print('Calculando e plotando a velocidade...')
+    tunnel.calculate('V')
+    tunnel.plot('V')
 
-    # input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
+    input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
+
+    print('\033[F', end='')
+    print('Calculando e plotando a pressão no domínio e no carro...')
+    tunnel.calculate('p')
+    tunnel.plot('p')
+    tunnel.plot('pcar')
 
     # plate.calculate('i')
     # plate.calculate('R')

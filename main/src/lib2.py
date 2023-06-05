@@ -4,7 +4,7 @@
 
 import numpy as np
 import plotly.graph_objs as go
-
+import matplotlib.pyplot as plt
 
 class Car:
     def __init__(self, x_range, y_range):
@@ -90,19 +90,26 @@ class Car:
             ),
         ]
 
-    def _contains_node(self, locs):
-        x, y = locs
+    def _contains_node(self, coordinates):
+        x, y = coordinates
 
-        if y < self.y_center: return False
+        if y < self.y_center: return (False, False)
 
         center_distance = np.sqrt((x-self.x_center)**2 + (y-self.y_center)**2)
-        return center_distance <= self.radius
+        is_interior_node = center_distance < self.radius
+        is_contour_node = np.isclose(center_distance, self.radius)
 
+        return (is_interior_node, is_contour_node)
 
 class Tunnel:
     def __init__(self, x_range, y_range, attributes):
-        self.V_params = attributes["V"]
-        self.V = 100
+        self.C_params = attributes["C"]
+        self.v_params = attributes["v"]
+        self.u_params = attributes["u"]
+
+        self.V = 100.0
+        self.rho = 1.25
+        self.gamma = 1.4
 
         self.car = Car(x_range, y_range)
 
@@ -111,7 +118,9 @@ class Tunnel:
         self.x_grid, self.y_grid, self.meshgrid = self._gen_initial_grid()
 
         self._set_node_attributes({
-            "V": self.V_params,
+            "C": self.C_params,
+            "u": self.u_params,
+            "v": self.v_params,
         })
 
         self._update_grid_irregs()
@@ -132,7 +141,7 @@ class Tunnel:
     def _get_primitive_matrix(self, element):
         return np.array([[element] * self.n_j] * self.n_i)
 
-    def _find_node_region(self, node, params):
+    def _find_node_params_by_region(self, node, params):
         if node.is_car:
             return {
                 "coeffs" : lambda T, n: [0, 0, 0, 0, 0],
@@ -140,10 +149,8 @@ class Tunnel:
                 "color"  : "rgba(0, 0, 0, 0)",
             }
 
-        boundaries = params["regions"]
-
-        for i in range(len(boundaries)):
-            lower_x, upper_x, lower_y, upper_y = boundaries[i]
+        for i in range(len(params["regions"])):
+            lower_x, upper_x, lower_y, upper_y = params["regions"][i]
 
             x_tests = [
                 lower_x <= node.x <= upper_x,
@@ -169,25 +176,46 @@ class Tunnel:
         for i in range(self.n_i):
             for j in range(self.n_j):
                 indexes = (i, j)
-                locs = (self.x_vals[j], self.y_vals[i])
-                is_car = self.car._contains_node(locs)
+                coordinates = (self.x_vals[j], self.y_vals[i])
+                car_interior, car_countour = self.car._contains_node(coordinates)
 
-                meshgrid[i, j] = Node(indexes, locs, is_car)
+                meshgrid[i, j] = Node(
+                    indexes,
+                    coordinates,
+                    car_interior,
+                    car_countour
+                )
         return x_grid, y_grid, meshgrid
 
     def _set_node_attributes(self, attributes):
         for node in self.meshgrid.ravel():
             for name, params in attributes.items():
-                node_params = self._find_node_region(node, params)
+                node_params = self._find_node_params_by_region(node, params)
                 node.set_attribute(name, node_params)
 
-    def _get_adjacents_nodes(self, node):
+    def get_adjacents_values(self, adjacents, attribute, add_constant=True):
+        attribute_values = [
+            0 if node is None
+              else node.get_attribute_value(attribute)
+              for node in adjacents
+        ]
+        return attribute_values + ([1] if add_constant else [])
+
+    def get_adjacents_nodes(self, node, direction='both', include_self=False):
+        if direction not in ['row', 'col', 'both']:
+            raise ValueError(f"Unexpected direction `{direction}`")
+
         i, j = node.i, node.j
-        adjacents_idxs = [(i+1, j), (i, j+1), (i-1, j), (i, j-1)]
+
+        if direction == 'both': adjacents_idxs = [(i+1, j), (i, j+1), (i-1, j), (i, j-1)]
+        elif direction == 'row': adjacents_idxs = [(i, j+2), (i, j+1), (i, j-1), (i, j-2)]
+        else: adjacents_idxs = [(i+2, j), (i+1, j), (i-1, j), (i-2, j)]
+
+        if include_self: adjacents_idxs = [(i, j)] + adjacents_idxs
 
         return [
             self.meshgrid[row_idx, col_idx]
-                if (0 <= row_idx < self.n_j) and (0 <= col_idx < self.n_i)
+                if (0 <= row_idx < self.n_i) and (0 <= col_idx < self.n_j)
                 else None
                 for row_idx, col_idx in adjacents_idxs
         ]
@@ -204,7 +232,7 @@ class Tunnel:
                 distance = shortest(self.car.xh_car[equal_y_idxs], node.x)
                 adjustment_factor = distance / self.h_x
 
-                if np.isclose(adjustment_factor, 1): continue
+                if np.isclose(adjustment_factor, 1.0): continue
 
                 self.meshgrid[i, j].a = adjustment_factor
                 irregs_locs += c
@@ -213,7 +241,7 @@ class Tunnel:
                 distance = shortest(self.car.yv_car[equal_x_idxs], node.y)
                 adjustment_factor = distance / self.h_y
 
-                if np.isclose(adjustment_factor, 1): continue
+                if np.isclose(adjustment_factor, 1.0): continue
 
                 self.meshgrid[i, j].b = adjustment_factor
                 irregs_locs += c
@@ -234,7 +262,11 @@ class Tunnel:
 
         i, j = node.i, node.j
         for param in ["coeffs", "color"]:
-            self.meshgrid[i, j].V[param] = self.V_params["irregs"][irregs_locs][param]
+            self.meshgrid[i, j].C[param] = self.C_params["irregs"][irregs_locs][param]
+            if irregs_locs not in ['r', 'l']:
+                self.meshgrid[i, j].u[param] = self.u_params["irregs"][irregs_locs][param]
+            if irregs_locs != 'b':
+                self.meshgrid[i, j].v[param] = self.v_params["irregs"][irregs_locs][param]
 
     def _update_grid_irregs(self):
         for i in range(self.n_i):
@@ -243,7 +275,7 @@ class Tunnel:
 
                 if node.is_car: continue
 
-                adjacents = self._get_adjacents_nodes(node)
+                adjacents = self.get_adjacents_nodes(node)
                 irregs_locs_candidates = self._get_car_adjacents_locs(adjacents)
 
                 if irregs_locs_candidates:
@@ -252,17 +284,25 @@ class Tunnel:
 
     def _update_corners(self):
         for param in ["coeffs", "color"]:
-            self.meshgrid[ 0,  0].V[param] = self.V_params['corners']['bl'][param]
-            self.meshgrid[-1,  0].V[param] = self.V_params['corners']['tl'][param]
-            self.meshgrid[-1, -1].V[param] = self.V_params['corners']['tr'][param]
-            self.meshgrid[ 0, -1].V[param] = self.V_params['corners']['br'][param]
+            self.meshgrid[ 0,  0].C[param] = self.C_params['corners']['bl'][param]
+            self.meshgrid[-1,  0].C[param] = self.C_params['corners']['tl'][param]
+            self.meshgrid[-1, -1].C[param] = self.C_params['corners']['tr'][param]
+            self.meshgrid[ 0, -1].C[param] = self.C_params['corners']['br'][param]
 
     def _evaluate_coeffs(self):
         for i in range(self.n_i):
             for j in range(self.n_j):
                 if self.meshgrid[i, j].is_car: continue
 
-                self.meshgrid[i, j].V['coeffs'] = self.meshgrid[i, j].V['coeffs'](
+                self.meshgrid[i, j].C['coeffs'] = self.meshgrid[i, j].C['coeffs'](
+                    self,               # Tunnel
+                    self.meshgrid[i, j] # Node itself
+                )
+                self.meshgrid[i, j].u['coeffs'] = self.meshgrid[i, j].u['coeffs'](
+                    self,               # Tunnel
+                    self.meshgrid[i, j] # Node itself
+                )
+                self.meshgrid[i, j].v['coeffs'] = self.meshgrid[i, j].v['coeffs'](
                     self,               # Tunnel
                     self.meshgrid[i, j] # Node itself
                 )
@@ -273,8 +313,14 @@ class Tunnel:
 
     def get_attribute_value_matrix(self, name):
         attributes_values = {
-            "V_color": lambda p: p.V["color"],
-            "V": lambda p: p.V["value"],
+            "C_color" : lambda n: n.C["color"],
+            "C"       : lambda n: n.C["value"],
+            "u_color" : lambda n: n.u["color"],
+            "u"       : lambda n: n.u["value"],
+            "v_color" : lambda n: n.v["color"],
+            "v"       : lambda n: n.v["value"],
+            "S"       : lambda n: n.S["value"],
+            "p"       : lambda n: n.p["value"],
         }
 
         if name not in attributes_values:
@@ -289,8 +335,64 @@ class Tunnel:
             matrix[node.i, node.j] = attributes_values[name](node)
         return matrix
 
+    def _get_car_adjacents(self):
+        nodes_in = []
+        nodes_out = []
+        for i in range(self.n_i):
+            for j in range(self.n_j-1):
+                curr = self.meshgrid[i, j]
+                post = self.meshgrid[i, j+1]
+
+                if not curr.is_car and post.is_car: nodes_in.append(curr)
+                if curr.is_car and not post.is_car: nodes_out.append(post)
+        nodes_out.reverse()
+        return nodes_in + nodes_out
+
+    def _calculate_pressure(self):
+        for node in self.meshgrid.ravel():
+            node.set_attribute_value(
+                'p',
+                self.rho
+                * (self.gamma - 1) / self.gamma
+                * (self.V**2 - node.S['value']**2) / 2
+            )
+
+    def _calculate_velocity(self):
+
+        for node in self.meshgrid.ravel():
+            if node.is_car: continue
+
+            i, j = node.i, node.j
+
+            row_adjacents = self.get_adjacents_nodes(node, direction='row', include_self=True)
+            col_adjacents = self.get_adjacents_nodes(node, direction='col', include_self=True)
+
+            row_adj_vals = self.get_adjacents_values(row_adjacents, 'C', add_constant=False)
+            col_adj_vals = self.get_adjacents_values(col_adjacents, 'C', add_constant=False)
+
+            v = self.meshgrid[i, j].calc_updated('v', row_adj_vals)
+            u = self.meshgrid[i, j].calc_updated('u', col_adj_vals)
+
+
+
+            magnitude = np.sqrt(v**2 + u**2)
+
+            self.meshgrid[i, j].set_attribute_value('v', v)
+            self.meshgrid[i, j].set_attribute_value('u', u)
+            self.meshgrid[i, j].set_attribute_value('S', magnitude)
+
+    def calculate(self, attribute):
+        attributes_calcs = {
+            'V'  : lambda: self._calculate_velocity(),
+            'p'  : lambda: self._calculate_pressure(),
+        }
+
+        if attribute not in attributes_calcs:
+            raise ValueError(f"Unexpected value '{attribute}' passed to `attribute`")
+        return attributes_calcs[attribute]()
+
     def plot_meshgrid(self, which):
-        if which not in ["V"]:
+        if which not in ["C", "u", "v"]:
             raise ValueError(f"Unexpected value '{which}' passed to `which`")
 
         mesh_x_grid = self.x_grid
@@ -337,15 +439,15 @@ class Tunnel:
         fig = go.Figure(data=plot_data)
         fig.show()
 
-    def _plot_V(self):
+    def _plot_C(self):
         title = "Função de Corrente do Escoamento"
         zlabel = "Ψ"
-        V_grid = self.get_attribute_value_matrix('V')
+        C_grid = self.get_attribute_value_matrix('C')
 
         fig = go.Figure(data=[go.Surface(
             x=self.x_grid,
             y=self.y_grid,
-            z=V_grid,
+            z=C_grid,
             colorscale='Viridis',
         )])
         fig.update_traces(
@@ -355,22 +457,85 @@ class Tunnel:
                 color ='lightgreen',
                 highlightcolor="limegreen",
                 width=3,
-                start=0.5,
-                end=np.max(V_grid),
+                start=np.min(C_grid),
+                end=np.max(C_grid),
                 size=2,
             )
         )
         return fig, title, zlabel
 
+    def _plot_V(self):
+        plt.style.use('seaborn')
+        plt.ion()
+        plt.quiver(
+            self.x_grid,
+            self.y_grid,
+            self.get_attribute_value_matrix('u'),
+            self.get_attribute_value_matrix('v'),
+            self.get_attribute_value_matrix('S'),
+            cmap=plt.cm.viridis,
+        )
+        plt.pause(0.001)
+        plt.show()
+        return None
+
+    def _plot_p(self):
+        title = "Pressão no túnel de vento"
+        zlabel = "P"
+
+        fig = go.Figure(data=[go.Surface(
+            x=self.x_grid,
+            y=self.y_grid,
+            z=self.get_attribute_value_matrix('p'),
+            colorscale='Jet',
+        )])
+        return fig, title, zlabel
+
+    def _plot_pcar(self):
+        title = "Pressão na carroceria (mínimo em destaque)"
+        zlabel = "P"
+
+        nodes = self._get_car_adjacents()
+        plot_data = np.array([[n.x, n.y, n.p['value']] for n in nodes])
+        x, y, z = plot_data[:, 0], plot_data[:, 1], plot_data[:, 2]
+        minimun = plot_data[np.argmin(z), :]
+
+        shapes = [
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode='lines+markers',
+                line=dict(color=z, width=2),
+                marker=dict(color=z, size=4, colorscale='Jet'),
+            ),
+            go.Scatter3d(
+                x=[minimun[0]],
+                y=[minimun[1]],
+                z=[minimun[2]],
+                mode='markers',
+                marker=dict(color="#FF0000", size=8),
+            ),
+        ]
+        fig = go.Figure(data=shapes)
+        return fig, title, zlabel
+
     def plot(self, attribute):
-        map_plots = {
-            'V'     : lambda: self._plot_V(),
+        plot_generators = {
+            'C'    : lambda: self._plot_C(),
+            'V'    : lambda: self._plot_V(),
+            'p'    : lambda: self._plot_p(),
+            'pcar' : lambda: self._plot_pcar(),
         }
 
-        if attribute not in map_plots:
+        if attribute not in plot_generators:
             raise ValueError(f"Unexpected value '{attribute}' passed to `which`")
 
-        fig, title, zlabel = map_plots[attribute]()
+        # Hacky: integrate matplotlib in this plotly handler function
+        plot = plot_generators[attribute]()
+        if plot is None: return
+
+        fig, title, zlabel = plot
         fig.update_layout(
             title = title,
             showlegend = False,
@@ -384,40 +549,41 @@ class Tunnel:
 
 
 class Node:
-    def __init__(self, index, locs, is_car):
+    def __init__(self, index, locs, is_car_interior, is_car_countour):
         self.i, self.j = index
         self.x, self.y = locs
         self.a = self.b = None
-        self.is_car = is_car
 
-        self.V = None
+        self.is_car_interior = is_car_interior
+        self.is_car_countour = is_car_countour
+        self.is_car = is_car_interior or is_car_countour
+
+        self.C = {}
+        self.v = {}
+        self.u = {}
+        self.S = { "value": 0 }
+        self.p = {}
 
     def get_attribute_value(self, name):
-        attributes_values = {
-            "V": lambda: self.V["value"],
-        }
-
-        if name not in attributes_values:
+        if name not in ['C', 'u', 'v', 'S']:
             raise ValueError(f"Unexpected value '{name}' passed to `attribute`")
-        return attributes_values[name]()
+        return self.__dict__[name]['value']
 
     def set_attribute_value(self, name, value):
-        if name == "V":
-            self.V["value"] = value
-        else:
+        if name not in ['C', 'u', 'v', 'S', 'p']:
             raise ValueError(f"Unexpected value '{name}' passed to `attribute`")
-        return
+        self.__dict__[name]['value'] = value
 
     def set_attribute(self, name, params):
-        if name == "V":
-            self.V = params
-        else:
+        if name not in ['C', 'u', 'v', 'S', 'p']:
             raise ValueError(f"Unexpected value '{name}' passed to `name`")
-        return
+        setattr(self, name, params)
 
-    def update_and_get(self, attribute, adjacents):
+    def calc_updated(self, attribute, adjacents): # This function do not sets
         attributes_update_rule = {
-            "V": lambda n: np.sum(self.V["coeffs"] * n),
+            "C": lambda adjs: np.sum(self.C["coeffs"] * adjs),
+            "v": lambda adjs: np.sum(self.v["coeffs"] * adjs),
+            "u": lambda adjs: np.sum(self.u["coeffs"] * adjs),
         }
 
         if attribute not in attributes_update_rule:
@@ -442,27 +608,20 @@ class Liebmann:
     def _next_step_for(self, attribute):
         meshgrid = self.tunnel.meshgrid
 
-        n_rows = self.tunnel.n_j
-        n_cols = self.tunnel.n_i
+        n_rows = self.tunnel.n_i
+        n_cols = self.tunnel.n_j
 
         for i in range(n_rows):
             for j in range(n_cols):
                 if meshgrid[i, j].is_car: continue
 
-                adjacents_vals  = []
-                adjacents_idxs = [(i+1, j), (i, j+1), (i-1, j), (i, j-1)]
+                adjacents = self.tunnel.get_adjacents_nodes(meshgrid[i, j])
+                adjacents_vals = self.tunnel.get_adjacents_values(
+                    adjacents,
+                    attribute,
+                )
 
-                for row_idx, col_idx in adjacents_idxs:
-                    if (0 <= row_idx < n_cols) and (0 <= col_idx < n_cols):
-                        adjacents_vals.append(
-                            meshgrid[row_idx, col_idx].get_attribute_value(attribute)
-                        )
-                    else:
-                        adjacents_vals.append(0)
-
-                adjacents_vals.append(1) # Independent variable
-
-                updated_val = meshgrid[i, j].update_and_get(
+                updated_val = meshgrid[i, j].calc_updated(
                     attribute,
                     np.array(adjacents_vals),
                 )

@@ -20,7 +20,7 @@ def validate_input(text: str, valid_inputs: list, default: str = '') -> str:
     while True:
         user_input = input(text).lower() or default
         if user_input in valid_inputs: break
-        print('Entrada inválida!')
+        print(ctext('Entrada inválida!', 'r'))
     return user_input
 
 
