@@ -12,18 +12,18 @@ regions = np.array([
 
 coeffs = [
     lambda T, n: [  # Azul
-        3 / (2*T.h_x), # i
-        1 / (2*T.h_x), # i+2
-        -2 / T.h_x,    # i+1
-        0,             # i-1
-        0,             # i-2
+        0, # i
+        0, # i+2
+        0, # i+1
+        0, # i-1
+        0, # i-2
     ],
     lambda T, n: [  # Verde
-        -3 / (2*T.h_x), # i
-        0,              # i+2
-        0,              # i+1
-        2 / T.h_x,      # i-1
-        -1 / (2*T.h_x)  # i-2
+        0, # i
+        0, # i+2
+        0, # i+1
+        0, # i-1
+        0, # i-2
     ],
     lambda T, n: [        # Cinza
         0,                # i
@@ -40,45 +40,51 @@ initials = [
     0.0, # Cinza
 ]
 
+constant = [
+    True, # Azul
+    True, # Verde
+    False, # Cinza
+]
+
 irregs = {
     "br": {
         "color": "#FFFF00", # Amarelo
         "coeffs": lambda T, n: [
-            0,                # i
-            0,                # i+2
-            -1 / (2 * T.h_x), # i+1
-            1 / (2 * T.h_x),  # i-1
-            0,                # i-2
+            2 / (T.h_x * (n.a - 1)),  # i
+            0,                        # i+2
+            -1 / (T.h_x * (n.a - 1)), # i+1
+            -1 / (T.h_x * (n.a - 1)), # i-1
+            0,                        # i-2
         ],
     },
     "bl": {
         "color": "#FF0000", # Vermelho
         "coeffs": lambda T, n: [
-            0,                # i
-            0,                # i+2
-            -1 / (2 * T.h_x), # i+1
-            1 / (2 * T.h_x),  # i-1
-            0,                # i-2
+            -2 / (T.h_x * (n.a - 1)), # i
+            0,                        # i+2
+            1 / (T.h_x * (n.a - 1)),  # i+1
+            1 / (T.h_x * (n.a - 1)),  # i-1
+            0,                        # i-2
         ],
     },
     "r": {
         "color": "#FFFF00", # Amarelo
         "coeffs": lambda T, n: [
-            0,                # i
-            0,                # i+2
-            -1 / (2 * T.h_x), # i+1
-            1 / (2 * T.h_x),  # i-1
-            0,                # i-2
+            2 / (T.h_x * (n.a - 1)),  # i
+            0,                        # i+2
+            -1 / (T.h_x * (n.a - 1)), # i+1
+            -1 / (T.h_x * (n.a - 1)), # i-1
+            0,                        # i-2
         ],
     },
     "l": {
         "color": "#FF0000", # Vermelho
         "coeffs": lambda T, n: [
-            0,                # i
-            0,                # i+2
-            -1 / (2 * T.h_x), # i+1
-            1 / (2 * T.h_x),  # i-1
-            0,                # i-2
+            -2 / (T.h_x * (n.a - 1)), # i
+            0,                        # i+2
+            1 / (T.h_x * (n.a - 1)),  # i+1
+            1 / (T.h_x * (n.a - 1)),  # i-1
+            0,                        # i-2
         ],
     },
 }

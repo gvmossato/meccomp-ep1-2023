@@ -14,6 +14,9 @@ class Car:
         self.h_y = y_range[2]
         self.radius = 1.5
 
+        self.x_min = self.x_center - self.radius
+        self.x_max = self.x_center + self.radius
+
         self.xv_car, self.yv_car = self._gen_x_referred_nodes()
         self.xh_car, self.yh_car = self._gen_y_referred_nodes()
         self.plot_countour = self._gen_plot_countour()
@@ -90,16 +93,42 @@ class Car:
             ),
         ]
 
-    def _contains_node(self, coordinates):
+    def _specify_node_region(self, coordinates):
+        def is_within_range(v, v_min, v_max):
+            return (
+                v_min < v < v_max
+                or np.isclose(v, v_min)
+                or np.isclose(v, v_max)
+            )
+
         x, y = coordinates
 
-        if y < self.y_center: return (False, False)
+        if (
+            y < self.y_center
+            and not np.isclose(y, self.y_center)
+        ): return None
+        if (
+            np.isclose(y, self.y_center)
+            and is_within_range(x, self.x_min, self.x_max)
+        ): return 'line'
 
         center_distance = np.sqrt((x-self.x_center)**2 + (y-self.y_center)**2)
-        is_interior_node = center_distance < self.radius
-        is_contour_node = np.isclose(center_distance, self.radius)
 
-        return (is_interior_node, is_contour_node)
+        if (
+            not np.isclose(center_distance, self.radius)
+            and center_distance < self.radius
+        ): return 'interior'
+        if (
+            np.isclose(center_distance, self.radius)
+        ): return 'arc'
+        return None
+
+    def get_normal_vector(self, node):
+        x, y = node.x, node.y
+        magnitude = np.sqrt(x**2 + y**2)
+
+        width = np.abs(x - self.x_center)
+        height = np.abs(y - self.y_center)
 
 class Tunnel:
     def __init__(self, x_range, y_range, attributes):
@@ -107,7 +136,7 @@ class Tunnel:
         self.v_params = attributes["v"]
         self.u_params = attributes["u"]
 
-        self.V = 100.0
+        self.V = 100.0 / 3.6
         self.rho = 1.25
         self.gamma = 1.4
 
@@ -144,9 +173,10 @@ class Tunnel:
     def _find_node_params_by_region(self, node, params):
         if node.is_car:
             return {
-                "coeffs" : lambda T, n: [0, 0, 0, 0, 0],
-                "value"  : 0,
-                "color"  : "rgba(0, 0, 0, 0)",
+                "coeffs"   : lambda T, n: [0, 0, 0, 0, 0],
+                "value"    : 0,
+                "color"    : "rgba(0, 0, 0, 0)",
+                "constant" : True
             }
 
         for i in range(len(params["regions"])):
@@ -163,9 +193,10 @@ class Tunnel:
 
             if np.any(x_tests) and np.any(y_tests):
                 return {
-                    "coeffs": params["coeffs"][i],
-                    "value": params["initials"][i],
-                    "color": params["colors"][i],
+                    "coeffs"   : params["coeffs"][i],
+                    "value"    : params["initials"][i],
+                    "constant" : params["constant"][i],
+                    "color"    : params["colors"][i],
                 }
         raise ValueError(f"Unable to assign params for {(node.x, node.y)}")
 
@@ -177,13 +208,12 @@ class Tunnel:
             for j in range(self.n_j):
                 indexes = (i, j)
                 coordinates = (self.x_vals[j], self.y_vals[i])
-                car_interior, car_countour = self.car._contains_node(coordinates)
+                car_loc = self.car._specify_node_region(coordinates)
 
                 meshgrid[i, j] = Node(
                     indexes,
                     coordinates,
-                    car_interior,
-                    car_countour
+                    car_loc,
                 )
         return x_grid, y_grid, meshgrid
 
@@ -335,18 +365,33 @@ class Tunnel:
             matrix[node.i, node.j] = attributes_values[name](node)
         return matrix
 
-    def _get_car_adjacents(self):
-        nodes_in = []
-        nodes_out = []
-        for i in range(self.n_i):
-            for j in range(self.n_j-1):
-                curr = self.meshgrid[i, j]
-                post = self.meshgrid[i, j+1]
+    def _get_car_adjacents(self, split=False):
+        def sort_nodes(arc, line):
+            arc_mid = int(len(arc) / 2)
+            sorted_arc = sorted(arc, key=lambda n: n.x)
+            asc_quarter = sorted_arc[:arc_mid]
+            desc_quarter = sorted(sorted_arc[arc_mid:], key=lambda n: (n.x, -n.y))
 
-                if not curr.is_car and post.is_car: nodes_in.append(curr)
-                if curr.is_car and not post.is_car: nodes_out.append(post)
-        nodes_out.reverse()
-        return nodes_in + nodes_out
+            desc_line = sorted(line, key=lambda n: -n.x)
+            return (asc_quarter + desc_quarter, desc_line)
+
+        arc_adjacents = []
+        line_adjacents = []
+        under_car = self.car.y_center - self.h_y
+
+        for node in self.meshgrid.ravel():
+            if node.is_car: continue
+
+            car_adjacent = np.any([n.is_car for n in self.get_adjacents_nodes(node) if n])
+            if not car_adjacent: continue
+
+            if np.isclose(node.y, under_car):
+                line_adjacents.append(node)
+            else:
+                arc_adjacents.append(node)
+
+        sorted_arc, sorted_line = sort_nodes(arc_adjacents, line_adjacents)
+        return (sorted_arc, sorted_line) if split else (sorted_arc + sorted_line)
 
     def _calculate_pressure(self):
         for node in self.meshgrid.ravel():
@@ -357,8 +402,35 @@ class Tunnel:
                 * (self.V**2 - node.S['value']**2) / 2
             )
 
-    def _calculate_velocity(self):
+    def _calculate_lift_force(self):
+        def arr_mean(arr): return (arr[1:] + arr[:-1]) / 2
+        def arr_diff(arr): return arr[:-1] - arr[1:]
 
+        def arc_force(nodes):
+            pressures = np.array([n.p for n in nodes])
+            abscisses = np.array([n.x for n in nodes])
+            ordinates = np.array([n.y for n in nodes])
+
+            # Assumes that x and y distances may not be self.h_x and self.h_y
+            x_distances = arr_diff(abscisses)
+            y_distances = arr_diff(ordinates)
+            distances = np.sqrt(x_distances**2 + y_distances**2)
+
+            midpoint_ordinates = arr_mean(ordinates)
+            midpoint_pressures = arr_mean(pressures)
+
+            normal_vec_sines = midpoint_ordinates / self.car.radius
+            return np.sum(midpoint_pressures * distances * normal_vec_sines)
+
+        def line_force(nodes):
+            pressures = np.array([n.p for n in nodes])
+            midpoint_pressures = arr_mean(pressures)
+            return np.sum(midpoint_pressures * self.h_x)
+
+        arc_nodes, line_nodes = self._get_car_adjacents(split=True)
+        return arc_force(arc_nodes) + line_force(line_nodes)
+
+    def _calculate_velocity(self):
         for node in self.meshgrid.ravel():
             if node.is_car: continue
 
@@ -373,12 +445,15 @@ class Tunnel:
             v = self.meshgrid[i, j].calc_updated('v', row_adj_vals)
             u = self.meshgrid[i, j].calc_updated('u', col_adj_vals)
 
-
-
-            magnitude = np.sqrt(v**2 + u**2)
-
             self.meshgrid[i, j].set_attribute_value('v', v)
             self.meshgrid[i, j].set_attribute_value('u', u)
+
+            # Considerating there's is a "constant" property in nodes attributes the calculated
+            # value maybe was not set, therefore we get the values again for consistency
+            v = self.meshgrid[i, j].get_attribute_value('v')
+            u = self.meshgrid[i, j].get_attribute_value('u')
+
+            magnitude = np.sqrt(v**2 + u**2)
             self.meshgrid[i, j].set_attribute_value('S', magnitude)
 
     def calculate(self, attribute):
@@ -474,6 +549,7 @@ class Tunnel:
             self.get_attribute_value_matrix('v'),
             self.get_attribute_value_matrix('S'),
             cmap=plt.cm.viridis,
+            pivot='mid',
         )
         plt.pause(0.001)
         plt.show()
@@ -549,20 +625,21 @@ class Tunnel:
 
 
 class Node:
-    def __init__(self, index, locs, is_car_interior, is_car_countour):
-        self.i, self.j = index
-        self.x, self.y = locs
+    def __init__(self, indexes, coordinates, car_loc):
+        self.i, self.j = indexes
+        self.x, self.y = coordinates
+        self.car_loc = car_loc
+        self.is_car = bool(car_loc)
+
+        # Properties defined by Tunnel conditions
         self.a = self.b = None
-
-        self.is_car_interior = is_car_interior
-        self.is_car_countour = is_car_countour
-        self.is_car = is_car_interior or is_car_countour
-
         self.C = {}
         self.v = {}
         self.u = {}
-        self.S = { "value": 0 }
-        self.p = {}
+
+        # Derived properties
+        self.S = { "value": 0, "constant": False }
+        self.p = { "value": 0, "constant": False }
 
     def get_attribute_value(self, name):
         if name not in ['C', 'u', 'v', 'S']:
@@ -572,6 +649,7 @@ class Node:
     def set_attribute_value(self, name, value):
         if name not in ['C', 'u', 'v', 'S', 'p']:
             raise ValueError(f"Unexpected value '{name}' passed to `attribute`")
+        if self.__dict__[name]['constant']: return
         self.__dict__[name]['value'] = value
 
     def set_attribute(self, name, params):

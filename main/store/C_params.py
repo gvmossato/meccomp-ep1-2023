@@ -58,6 +58,14 @@ initials = [
     0.0, # Cinza
 ]
 
+constant = [
+    False, # Azul
+    False, # Rosa
+    False, # Verde
+    True,  # Vermelho
+    False, # Cinza
+]
+
 irregs = {
     "r": {
         "color": "#00DDFF", # Ciano
