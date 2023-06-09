@@ -20,8 +20,8 @@ def solve(item):
             [0.00, 6.00, 0.025],
         ]
     else:
-        x_ranges = [[0.00, 6.00, 0.1]]#050]]
-        y_ranges = [[0.00, 6.00, 0.1]]#050]]
+        x_ranges = [[0.00, 6.00, 0.100]]
+        y_ranges = [[0.00, 6.00, 0.100]]
 
     for x_range, y_range in zip(x_ranges, y_ranges):
         print('\033[F', end='')
@@ -40,14 +40,15 @@ def solve(item):
             print(f"{ctext('C.', 'c')} Corrente de escoamento")
             print(f"{ctext('u.', 'c')} Componente horizontal da velocidade")
             print(f"{ctext('v.', 'c')} Componente vertical da velocidade")
+            print(f"{ctext('T.', 'c')} Temperatura")
 
             choosen_meshgrid = validate_input(
-                f"Entre com {ctext('C', 'c')}, {ctext('u', 'c')}, {ctext('v', 'c')} ou pressione {ctext('ENTER', 'g')} para continuar: ",
-                ['c', 'u', 'v', 'ENTER'],
+                f"Entre com {ctext('C', 'c')}, {ctext('u', 'c')}, {ctext('v', 'c')}, {ctext('T', 'c')} ou pressione {ctext('ENTER', 'g')} para continuar: ",
+                ['c', 'u', 'v', 't', 'ENTER'],
                 'ENTER'
             )
 
-            if choosen_meshgrid in ['c']: choosen_meshgrid = choosen_meshgrid.upper()
+            if choosen_meshgrid in ['c', 't']: choosen_meshgrid = choosen_meshgrid.upper()
             elif choosen_meshgrid in ['u', 'v']: pass
             else: break
 
@@ -74,12 +75,17 @@ def solve(item):
     tunnel.plot('p')
     tunnel.plot('pcar')
 
-    # plate.calculate('i')
-    # plate.calculate('R')
-    # print('\033[F', end='')
-    # print('Propriedades do bloco encontradas:')
-    # print(f"{ctext('Corrente através da parede:', 'b')} {plate.i*1000:.4} mA")
-    # print(f"{ctext('Resistência:', 'b')} {plate.R/1000:.4} kΩ")
+    input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
+
+    tunnel.calculate('F')
+    print('\033[F', end='')
+    print(f"{ctext('Força de Levantamento na Carroceria:', 'b')} {tunnel.F:.2f} N")
+
+    input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
+
+    print('\nCalculando e plotando a temperatura...')
+    tunnel.apply_liebmann_for('T', 1.85, 0.01)
+    tunnel.plot('T')
 
     # input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
 

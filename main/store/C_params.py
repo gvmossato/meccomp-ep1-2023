@@ -108,7 +108,7 @@ irregs = {
         ],
     },
     "l": {
-        "color": "#82AEFF", # Vinho
+        "color": "#82AEFF", # Azul Claro
         "coeffs": lambda T, n: [
             T.h_x**2 * n.a / (2 * (T.h_x**2*n.a + T.h_y**2)),       # j+1
             T.h_y**2 * n.a / ((n.a+1) * (T.h_x**2*n.a + T.h_y**2)), # i+1
@@ -129,6 +129,8 @@ corners = {
             0,                                              # i-1
             T.h_x**2 * T.h_y * T.V / (T.h_x**2 + T.h_y**2), # indep
         ],
+        "constant": False,
+        "initial": 0,
     },
     'tr': {
         "color": "#804800", # Marrom
@@ -139,6 +141,8 @@ corners = {
             T.h_y**2 / (T.h_x**2 + T.h_y**2),               # i-1
             T.h_x**2 * T.h_y * T.V / (T.h_x**2 + T.h_y**2), # indep
         ],
+        "constant": False,
+        "initial": 0,
     },
     'br': {
         "color": "#000000", # Preto
@@ -149,6 +153,8 @@ corners = {
             0, # i-1
             0, # indep
         ],
+        "constant": True,
+        "initial": 0,
     },
     'bl': {
         "color": "#000000", # Preto
@@ -159,6 +165,8 @@ corners = {
             0, # i-1
             0, # indep
         ],
+        "constant": True,
+        "initial": 0,
     }
 }
 
