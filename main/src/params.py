@@ -6,6 +6,8 @@ import main.store.C_params as C
 import main.store.u_params as u
 import main.store.v_params as v
 import main.store.T_params as T
+import main.store.z_params as z
+import main.store.w_params as w
 
 
 C_params = {
@@ -46,9 +48,29 @@ T_params = {
     "colors"   : T.colors,
 }
 
+z_params = {
+    "regions"  : z.regions,
+    "coeffs"   : z.coeffs,
+    "initials" : z.initials,
+    "constant" : z.constant,
+    "irregs"   : z.irregs,
+    "colors"   : z.colors,
+}
+
+w_params = {
+    "regions"  : w.regions,
+    "coeffs"   : w.coeffs,
+    "initials" : w.initials,
+    "constant" : w.constant,
+    "irregs"   : w.irregs,
+    "colors"   : w.colors,
+}
+
 params = {
     "C": C_params,
     "u": u_params,
     "v": v_params,
     "T": T_params,
+    "z": z_params,
+    "w": w_params,
 }

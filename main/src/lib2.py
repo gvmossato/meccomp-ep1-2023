@@ -123,19 +123,29 @@ class Car:
         ): return 'arc'
         return None
 
+    def get_normal_versors(self, x_vals, y_vals):
+        x_lens = x_vals - self.x_center
+        y_lens = y_vals - self.y_center
+        lengths = np.sqrt(x_lens**2 + y_lens**2)
+        return np.array([x_lens, y_lens]) / lengths
+
+
 class Tunnel:
     def __init__(self, x_range, y_range, attributes):
         self.C_params = attributes["C"]
         self.v_params = attributes["v"]
         self.u_params = attributes["u"]
         self.T_params = attributes["T"]
+        self.z_params = attributes["z"]
+        self.w_params = attributes["w"]
 
         self.V = 100.0 / 3.6
         self.rho = 1.25
         self.gamma = 1.4
         self.F = None
+        self.Q = None
         self.k = 0.026
-        self.cp = 1002
+        self.cp = 1002.0
 
         self.T_out = 293.15
         self.T_in = 298.15
@@ -152,11 +162,13 @@ class Tunnel:
             "u": self.u_params,
             "v": self.v_params,
             "T": self.T_params,
+            "w": self.w_params,
+            "z": self.z_params,
         })
 
         self._update_grid_irregs()
         self._update_corners()
-        self._evaluate_coeffs()
+        self._evaluate_general_coeffs()
 
     def _gen_ranges(self, x_range, y_range):
         x_start, x_stop, x_step = x_range
@@ -324,8 +336,10 @@ class Tunnel:
 
             if irregs_locs not in ['r', 'l']:
                 self.meshgrid[i, j].u[param] = self.u_params["irregs"][irregs_locs][param]
+                self.meshgrid[i, j].w[param] = self.w_params["irregs"][irregs_locs][param]
             if irregs_locs != 'b':
                 self.meshgrid[i, j].v[param] = self.v_params["irregs"][irregs_locs][param]
+                self.meshgrid[i, j].z[param] = self.z_params["irregs"][irregs_locs][param]
 
     def _update_grid_irregs(self):
         for i in range(self.n_i):
@@ -353,7 +367,7 @@ class Tunnel:
             self.meshgrid[-1, -1].T[param] = self.T_params['corners']['tr'][param]
             self.meshgrid[ 0, -1].T[param] = self.T_params['corners']['br'][param]
 
-    def _evaluate_coeffs(self):
+    def _evaluate_general_coeffs(self):
         for i in range(self.n_i):
             for j in range(self.n_j):
                 if self.meshgrid[i, j].is_car: continue
@@ -370,12 +384,27 @@ class Tunnel:
                     self,
                     self.meshgrid[i, j],
                 )
+                self.meshgrid[i, j].z['coeffs'] = self.meshgrid[i, j].z['coeffs'](
+                    self,
+                    self.meshgrid[i, j],
+                )
+                self.meshgrid[i, j].w['coeffs'] = self.meshgrid[i, j].w['coeffs'](
+                    self,
+                    self.meshgrid[i, j],
+                )
+
+    def _evaluate_T_coeffs(self):
+        for i in range(self.n_i):
+            for j in range(self.n_j):
+                if self.meshgrid[i, j].is_car: continue
                 self.meshgrid[i, j].T['coeffs'] = self.meshgrid[i, j].T['coeffs'](
                     self,
                     self.meshgrid[i, j],
                 )
 
     def apply_liebmann_for(self, attribute, lamb, max_error):
+        if attribute == 'T': self._evaluate_T_coeffs()
+
         liebmann = Liebmann(self, lamb, max_error)
         self.meshgrid = liebmann.solve_for(attribute)
 
@@ -391,6 +420,11 @@ class Tunnel:
             "p"       : lambda n: n.p["value"],
             "T"       : lambda n: n.T["value"],
             "T_color" : lambda n: n.T["color"],
+            "z_color" : lambda n: n.z["color"],
+            "z"       : lambda n: n.z["value"],
+            "w_color" : lambda n: n.w["color"],
+            "w"       : lambda n: n.w["value"],
+            "q"       : lambda n: n.q["value"],
         }
 
         if name not in attributes_values:
@@ -459,7 +493,8 @@ class Tunnel:
             midpoint_ordinates = arr_mean(ordinates)
             midpoint_pressures = arr_mean(pressures)
 
-            normal_vec_sines = midpoint_ordinates / self.car.radius
+            # Lift force <=> Vertical component only (sine)
+            normal_vec_sines = (midpoint_ordinates - self.car.y_center) / self.car.radius
             return np.sum(midpoint_pressures * distances * normal_vec_sines)
 
         def line_force(nodes):
@@ -482,6 +517,7 @@ class Tunnel:
             row_adj_vals = self.get_adjacents_values(row_adjacents, 'C', add_constant=False)
             col_adj_vals = self.get_adjacents_values(col_adjacents, 'C', add_constant=False)
 
+            # v is vertical component of S, but is calculated from the horizontal component (row) of C
             v = self.meshgrid[i, j].calc_updated('v', row_adj_vals)
             u = self.meshgrid[i, j].calc_updated('u', col_adj_vals)
 
@@ -496,11 +532,81 @@ class Tunnel:
             magnitude = np.sqrt(v**2 + u**2)
             self.meshgrid[i, j].set_attribute_value('S', magnitude)
 
+    def _calculate_car_heat_flux(self):
+        def arr_mean(arr): return (arr[1:] + arr[:-1]) / 2
+        def arr_diff(arr): return arr[:-1] - arr[1:]
+        def dot_prod(x1, y1, x2, y2): return x1 * x2 + y1 * y2
+
+        def arc_flux(nodes):
+            x_heats = np.array([n.z["value"] for n in nodes])
+            y_heats = np.array([n.w["value"] for n in nodes])
+
+            abscisses = np.array([n.x for n in nodes])
+            ordinates = np.array([n.y for n in nodes])
+
+            # Assumes that x and y distances may not be self.h_x and self.h_y
+            x_distances = arr_diff(abscisses)
+            y_distances = arr_diff(ordinates)
+            distances = np.sqrt(x_distances**2 + y_distances**2)
+
+            midpoint_abscisses = arr_mean(abscisses)
+            midpoint_ordinates = arr_mean(ordinates)
+            midpoint_x_heats = arr_mean(x_heats)
+            midpoint_y_heats = arr_mean(y_heats)
+
+            normal_versors_x, normal_versors_y = self.car.get_normal_versors(
+                midpoint_abscisses,
+                midpoint_ordinates
+            )
+            normal_flux = dot_prod(
+                normal_versors_x,
+                normal_versors_y,
+                midpoint_x_heats,
+                midpoint_y_heats,
+            )
+            return np.sum(normal_flux * distances)
+
+        def line_flux(nodes):
+            y_heats = np.array([n.w["value"] for n in nodes])
+            midpoint_heats = arr_mean(y_heats)
+            return np.sum(midpoint_heats * self.h_x)
+
+        arc_nodes, line_nodes = self._get_car_adjacents(split=True)
+        self.Q = arc_flux(arc_nodes) + line_flux(line_nodes)
+
+    def _calculate_heat_flux(self):
+        for node in self.meshgrid.ravel():
+            if node.is_car: continue
+
+            i, j = node.i, node.j
+
+            row_adjacents = self.get_adjacents_nodes(node, direction='row', include_self=True)
+            col_adjacents = self.get_adjacents_nodes(node, direction='col', include_self=True)
+
+            row_adj_vals = self.get_adjacents_values(row_adjacents, 'T', add_constant=False)
+            col_adj_vals = self.get_adjacents_values(col_adjacents, 'T', add_constant=False)
+
+            z = self.meshgrid[i, j].calc_updated('z', row_adj_vals)
+            w = self.meshgrid[i, j].calc_updated('w', col_adj_vals)
+
+            self.meshgrid[i, j].set_attribute_value('z', z)
+            self.meshgrid[i, j].set_attribute_value('w', w)
+
+            # Considerating there's is a "constant" property in nodes attributes the calculated
+            # value maybe was not set, therefore we get the values again for consistency
+            z = self.meshgrid[i, j].get_attribute_value('z')
+            w = self.meshgrid[i, j].get_attribute_value('w')
+
+            magnitude = np.sqrt(z**2 + w**2)
+            self.meshgrid[i, j].set_attribute_value('q', magnitude)
+
     def calculate(self, attribute):
         attributes_calcs = {
-            'V'  : lambda: self._calculate_velocity(),
-            'p'  : lambda: self._calculate_pressure(),
-            'F'  : lambda: self._calculate_lift_force(),
+            'V'    : lambda: self._calculate_velocity(),
+            'p'    : lambda: self._calculate_pressure(),
+            'F'    : lambda: self._calculate_lift_force(),
+            'q'    : lambda: self._calculate_heat_flux(),
+            'qcar' : lambda: self._calculate_car_heat_flux(),
         }
 
         if attribute not in attributes_calcs:
@@ -508,7 +614,7 @@ class Tunnel:
         return attributes_calcs[attribute]()
 
     def plot_meshgrid(self, which):
-        if which not in ["C", "u", "v", "T"]:
+        if which not in ["C", "u", "v", "T", "w", "z"]:
             raise ValueError(f"Unexpected value '{which}' passed to `which`")
 
         mesh_x_grid = self.x_grid
@@ -580,7 +686,19 @@ class Tunnel:
         )
         return fig, title, zlabel
 
-    def _plot_T(self):
+    def _plot_T_heatmap(self):
+        title = "Temperatura no Túnel (K)"
+        zlabel = "Temeratura (K)"
+
+        fig = go.Figure(data=[go.Heatmap(
+            x=self.x_vals,
+            y=self.y_vals,
+            z=self.get_attribute_value_matrix('T'),
+            colorscale='Inferno',
+        )])
+        return fig, title, zlabel
+
+    def _plot_T_surface(self):
         title = "Temperatura no Túnel (K)"
         zlabel = "Temeratura (K)"
 
@@ -595,18 +713,42 @@ class Tunnel:
     def _plot_V(self):
         plt.style.use('seaborn')
         plt.ion()
+        plt.figure()
         plt.quiver(
             self.x_grid,
             self.y_grid,
-            self.get_attribute_value_matrix('u'),
-            self.get_attribute_value_matrix('v'),
-            self.get_attribute_value_matrix('S'),
+            self.get_attribute_value_matrix('u'), # Horizontal
+            self.get_attribute_value_matrix('v'), # Vertical
+            self.get_attribute_value_matrix('S'), # Magnitude
             cmap=plt.cm.viridis,
             pivot='mid',
         )
         plt.pause(0.001)
 
         plt.title("Distribuição de Velocidades (m/s)")
+        plt.xlabel("x (m)")
+        plt.ylabel("y (m)")
+        plt.colorbar()
+
+        plt.show()
+        return None
+
+    def _plot_q(self):
+        plt.style.use('seaborn')
+        plt.ion()
+        plt.figure()
+        plt.quiver(
+            self.x_grid,
+            self.y_grid,
+            self.get_attribute_value_matrix('z'),
+            self.get_attribute_value_matrix('w'),
+            self.get_attribute_value_matrix('q'),
+            cmap=plt.cm.plasma,
+            scale=100,
+        )
+        plt.pause(0.001)
+
+        plt.title("Fluxo de calor (W)")
         plt.xlabel("x (m)")
         plt.ylabel("y (m)")
         plt.colorbar()
@@ -657,11 +799,13 @@ class Tunnel:
 
     def plot(self, attribute):
         plot_generators = {
-            'C'    : lambda: self._plot_C(),
-            'V'    : lambda: self._plot_V(),
-            'p'    : lambda: self._plot_p(),
-            'pcar' : lambda: self._plot_pcar(),
-            'T'    : lambda: self._plot_T(),
+            'C'     : lambda: self._plot_C(),
+            'V'     : lambda: self._plot_V(),
+            'p'     : lambda: self._plot_p(),
+            'pcar'  : lambda: self._plot_pcar(),
+            'Tsurf' : lambda: self._plot_T_surface(),
+            'Tmap'  : lambda: self._plot_T_heatmap(),
+            'q'     : lambda: self._plot_q()
         }
 
         if attribute not in plot_generators:
@@ -697,24 +841,27 @@ class Node:
         self.v = {}
         self.u = {}
         self.T = {}
+        self.w = {}
+        self.z = {}
 
         # Derived properties
-        self.S = { "value": 0, "constant": False }
         self.p = { "value": 0, "constant": False }
+        self.S = { "value": 0, "constant": False }
+        self.q = { "value": 0, "constant": False }
 
     def get_attribute_value(self, name):
-        if name not in ['C', 'u', 'v', 'S', 'T']:
+        if name not in ['C', 'u', 'v', 'S', 'T', 'w', 'z', 'q']:
             raise ValueError(f"Unexpected value '{name}' passed to `attribute`")
         return self.__dict__[name]['value']
 
     def set_attribute_value(self, name, value):
-        if name not in ['C', 'u', 'v', 'S', 'p', 'T']:
+        if name not in ['C', 'u', 'v', 'S', 'p', 'T', 'w', 'z', 'q']:
             raise ValueError(f"Unexpected value '{name}' passed to `attribute`")
         if self.__dict__[name]['constant']: return
         self.__dict__[name]['value'] = value
 
     def set_attribute(self, name, params):
-        if name not in ['C', 'u', 'v', 'S', 'p', 'T']:
+        if name not in ['C', 'u', 'v', 'S', 'p', 'T',  'w', 'z', 'q']:
             raise ValueError(f"Unexpected value '{name}' passed to `name`")
         setattr(self, name, params)
 
@@ -724,6 +871,8 @@ class Node:
             "v": lambda adjs: np.sum(self.v["coeffs"] * adjs),
             "u": lambda adjs: np.sum(self.u["coeffs"] * adjs),
             "T": lambda adjs: np.sum(self.T["coeffs"] * adjs),
+            "w": lambda adjs: np.sum(self.w["coeffs"] * adjs),
+            "z": lambda adjs: np.sum(self.z["coeffs"] * adjs),
         }
 
         if attribute not in attributes_update_rule:
@@ -770,7 +919,11 @@ class Liebmann:
                     meshgrid[i, j].get_attribute_value(attribute)
                 )
 
-                meshgrid[i, j].set_attribute_value(attribute, updated_val)
+                # Hacky: helps converce
+                if attribute == 'T':
+                    adjusted_val = np.clip(adjusted_val, self.tunnel.T_out, np.inf)
+
+                meshgrid[i, j].set_attribute_value(attribute, adjusted_val)
 
     def solve_for(self, attribute):
         error = np.inf

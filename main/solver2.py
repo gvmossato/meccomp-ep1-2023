@@ -11,17 +11,17 @@ def solve(item):
     if item == 'a':
         x_ranges = [
             [0.00, 6.00, 0.500],
+            [0.00, 6.00, 0.100],
             [0.00, 6.00, 0.050],
-            [0.00, 6.00, 0.025],
         ]
         y_ranges = [
             [0.00, 6.00, 0.500],
+            [0.00, 6.00, 0.100],
             [0.00, 6.00, 0.050],
-            [0.00, 6.00, 0.025],
         ]
     else:
-        x_ranges = [[0.00, 6.00, 0.100]]
-        y_ranges = [[0.00, 6.00, 0.100]]
+        x_ranges = [[0.00, 6.00, 0.1]]
+        y_ranges = [[0.00, 6.00, 0.1]]
 
     for x_range, y_range in zip(x_ranges, y_ranges):
         print('\033[F', end='')
@@ -41,15 +41,17 @@ def solve(item):
             print(f"{ctext('u.', 'c')} Componente horizontal da velocidade")
             print(f"{ctext('v.', 'c')} Componente vertical da velocidade")
             print(f"{ctext('T.', 'c')} Temperatura")
+            print(f"{ctext('w.', 'c')} Componente horizontal do fluxo de calor")
+            print(f"{ctext('z.', 'c')} Componente vertical do fluxo de calor")
 
             choosen_meshgrid = validate_input(
-                f"Entre com {ctext('C', 'c')}, {ctext('u', 'c')}, {ctext('v', 'c')}, {ctext('T', 'c')} ou pressione {ctext('ENTER', 'g')} para continuar: ",
-                ['c', 'u', 'v', 't', 'ENTER'],
+                f"Entre com {ctext('C', 'c')}, {ctext('u', 'c')}, {ctext('v', 'c')}, {ctext('T', 'c')}, {ctext('w', 'c')}, {ctext('z', 'c')} ou pressione {ctext('ENTER', 'g')} para continuar: ",
+                ['c', 'u', 'v', 't', 'w', 'z', 'ENTER'],
                 'ENTER'
             )
 
             if choosen_meshgrid in ['c', 't']: choosen_meshgrid = choosen_meshgrid.upper()
-            elif choosen_meshgrid in ['u', 'v']: pass
+            elif choosen_meshgrid in ['u', 'v', 'w', 'z']: pass
             else: break
 
             tunnel.plot_meshgrid(choosen_meshgrid)
@@ -84,10 +86,19 @@ def solve(item):
     input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
 
     print('\nCalculando e plotando a temperatura...')
-    tunnel.apply_liebmann_for('T', 1.85, 0.01)
-    tunnel.plot('T')
+    tunnel.apply_liebmann_for('T', 1.05, 0.0001)
+    tunnel.plot('Tsurf')
+    tunnel.plot('Tmap')
 
-    # input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
+    input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
+
+    print('Calculando e plotando o fluxo de calor no domínio e no carro...')
+    tunnel.calculate('q')
+    tunnel.calculate('qcar')
+    tunnel.plot('q')
+    print(f"{ctext('Fluxo de calor através da carroceria:', 'b')} {tunnel.Q:.2f} W")
+
+    input(f"\nPressione {ctext('ENTER', 'g')} para continuar")
 
     # print('\033[F', end='')
     # print('Calculando e plotando a fonte de calor distribuído...')

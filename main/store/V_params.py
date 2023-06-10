@@ -1,5 +1,7 @@
-# ==================== #
-# Parâmetros de tensão #
+# ================================== #
+# Definições:
+# 1. Componente vertical do gradiente do potencial de velocidade
+# 2. Oposto da componente horizontal do gradiente da função de corrente do escoamento
 # ==================== #
 
 import numpy as np
