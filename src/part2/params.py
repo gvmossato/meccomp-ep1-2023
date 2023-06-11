@@ -1,13 +1,13 @@
-# =================================== #
-# Consolidação de todos os parâmetros #
-# =================================== #
+# ================================= #
+# Consolidate attributes parameters #
+# ================================= #
 
-import main.store.C_params as C
-import main.store.u_params as u
-import main.store.v_params as v
-import main.store.T_params as T
-import main.store.z_params as z
-import main.store.w_params as w
+import src.part2.attributes.params.C as C
+import src.part2.attributes.params.u as u
+import src.part2.attributes.params.v as v
+import src.part2.attributes.params.T as T
+import src.part2.attributes.params.z as z
+import src.part2.attributes.params.w as w
 
 
 C_params = {

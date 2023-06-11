@@ -2,6 +2,26 @@
 # Funções de suporte gerais #
 # ========================= #
 
+import plotly.graph_objs as go
+
+def line_plot(x_vals, y_vals, legends, title, xlabel, ylabel):
+    fig = go.Figure()
+
+    for i in range(len(y_vals)):
+        fig.add_trace(go.Scatter(
+            x=x_vals,
+            y=y_vals[i],
+            mode='markers+lines',
+            name=legends[i],
+        ))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title=xlabel,
+        yaxis_title=ylabel,
+    )
+    fig.show()
+
 def validate_input(text: str, valid_inputs: list, default: str = '') -> str:
     """
     Adicona lógica de validação de entrada e valor de entrada padrão

@@ -6,10 +6,11 @@ import numpy as np
 import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 
+
 class Car:
-    def __init__(self, x_range, y_range):
+    def __init__(self, x_range, y_range, h):
         self.x_center = (x_range[1] - x_range[0]) / 2
-        self.y_center = (y_range[1] - y_range[0]) / 4
+        self.y_center = h
         self.h_x = x_range[2]
         self.h_y = y_range[2]
         self.radius = 1.5
@@ -43,7 +44,7 @@ class Car:
             self.x_center - self.radius,
             -self.h_x,
         )
-        y_line = np.ones(len(x_line)) * 1.5
+        y_line = np.ones(len(x_line)) * self.y_center
 
         x_car = np.hstack([x_arc, x_line])
         y_car = np.hstack([y_arc, y_line])
@@ -131,7 +132,7 @@ class Car:
 
 
 class Tunnel:
-    def __init__(self, x_range, y_range, attributes):
+    def __init__(self, x_range, y_range, attributes, constants):
         self.C_params = attributes["C"]
         self.v_params = attributes["v"]
         self.u_params = attributes["u"]
@@ -139,19 +140,21 @@ class Tunnel:
         self.z_params = attributes["z"]
         self.w_params = attributes["w"]
 
-        self.V = 100.0 / 3.6
-        self.rho = 1.25
-        self.gamma = 1.4
+        self.V = constants["V"]
+
+        self.k = constants["k"]
+        self.cp = constants["cp"]
+        self.rho = constants["rho"]
+        self.gamma = constants["gamma"]
+
+        self.T_in = constants["T_in"]
+        self.T_out = constants["T_out"]
+        self.T_engine = constants["T_engine"]
+
         self.F = None
         self.Q = None
-        self.k = 0.026
-        self.cp = 1002.0
 
-        self.T_out = 293.15
-        self.T_in = 298.15
-        self.T_engine = 353.15
-
-        self.car = Car(x_range, y_range)
+        self.car = Car(x_range, y_range, constants["h"])
 
         self.h_x, self.h_y, self.x_vals, self.y_vals = self._gen_ranges(x_range, y_range)
         self.n_i, self.n_j = len(self.y_vals), len(self.x_vals)
@@ -402,10 +405,10 @@ class Tunnel:
                     self.meshgrid[i, j],
                 )
 
-    def apply_liebmann_for(self, attribute, lamb, max_error):
+    def apply_liebmann_for(self, attribute, lamb, max_error, verbose=True):
         if attribute == 'T': self._evaluate_T_coeffs()
 
-        liebmann = Liebmann(self, lamb, max_error)
+        liebmann = Liebmann(self, lamb, max_error, verbose)
         self.meshgrid = liebmann.solve_for(attribute)
 
     def get_attribute_value_matrix(self, name):
@@ -881,11 +884,12 @@ class Node:
 
 
 class Liebmann:
-    def __init__(self, tunnel, lamb, max_error):
+    def __init__(self, tunnel, lamb, max_error, verbose):
         self.tunnel = tunnel
         self.lamb = lamb
         self.epsilon = max_error
         self.step_count = 0
+        self.verbose = verbose
 
     def _SOR(self, new, curr):
         return self.lamb * new + (1-self.lamb) * curr
@@ -919,9 +923,7 @@ class Liebmann:
                     meshgrid[i, j].get_attribute_value(attribute)
                 )
 
-                # Hacky: helps converce
-                if attribute == 'T':
-                    adjusted_val = np.clip(adjusted_val, self.tunnel.T_out, np.inf)
+                if attribute == 'T': adjusted_val = np.clip(adjusted_val, self.tunnel.T_out, np.inf)
 
                 meshgrid[i, j].set_attribute_value(attribute, adjusted_val)
 
@@ -934,10 +936,9 @@ class Liebmann:
             curr_tunnel = self.tunnel.get_attribute_value_matrix(attribute)
             self._next_step_for(attribute)
             new_tunnel = self.tunnel.get_attribute_value_matrix(attribute)
-
             error = self._get_relative_error(new_tunnel, curr_tunnel)
 
-            print(f"Erro máximo: {error}                 ", end='\r')
+            if self.verbose: print(f"Erro máximo: {error}                 ", end='\r')
 
-        print()
+        if self.verbose: print()
         return self.tunnel.meshgrid
