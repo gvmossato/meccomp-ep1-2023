@@ -690,25 +690,25 @@ class Tunnel:
         return fig, title, zlabel
 
     def _plot_T_heatmap(self):
-        title = "Temperatura no Túnel (K)"
-        zlabel = "Temeratura (K)"
+        title = "Temperatura no Túnel (℃)"
+        zlabel = "Temeratura (℃)"
 
         fig = go.Figure(data=[go.Heatmap(
             x=self.x_vals,
             y=self.y_vals,
-            z=self.get_attribute_value_matrix('T'),
+            z=self.get_attribute_value_matrix('T') - 273.15,
             colorscale='Inferno',
         )])
         return fig, title, zlabel
 
     def _plot_T_surface(self):
-        title = "Temperatura no Túnel (K)"
-        zlabel = "Temeratura (K)"
+        title = "Temperatura no Túnel (℃)"
+        zlabel = "Temeratura (℃)"
 
         fig = go.Figure(data=[go.Surface(
             x=self.x_grid,
             y=self.y_grid,
-            z=self.get_attribute_value_matrix('T'),
+            z=self.get_attribute_value_matrix('T') - 273.15,
             colorscale='Inferno',
         )])
         return fig, title, zlabel
@@ -922,8 +922,6 @@ class Liebmann:
                     updated_val,
                     meshgrid[i, j].get_attribute_value(attribute)
                 )
-
-                if attribute == 'T': adjusted_val = np.clip(adjusted_val, self.tunnel.T_out, np.inf)
 
                 meshgrid[i, j].set_attribute_value(attribute, adjusted_val)
 
