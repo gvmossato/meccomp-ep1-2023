@@ -11,25 +11,25 @@ import src.part2.attributes.equations.u as eq
 
 regions = np.array([
     [0.00, 6.00, 6.00, 6.00],           # Rosa
-    [0.00, 6.00, 0.00, 0.00],           # Rosa
+    [0.00, 6.00, 0.00, 0.00],           # Vermelho
     [-np.inf, np.inf, -np.inf, np.inf], # Cinza
  ])
 
 coeffs = [
     lambda T, n: eq.pink(T, n),
-    lambda T, n: eq.pink(T, n),
+    lambda T, n: eq.pink(T, n), # Coeffs are the same from pink
     lambda T, n: eq.gray(T, n),
 ]
 
 initials = [
     100.0 / 3.6, # Rosa
-    0.0,         # Rosa
+    0.0,         # Vermelho
     0.0,         # Cinza
 ]
 
 constant = [
     True,  # Rosa
-    True,  # Rosa
+    True,  # Vermelho
     False, # Cinza
 ]
 
@@ -51,6 +51,6 @@ irregs = {
 
 colors = [
     "#FF00D0", # Rosa
-    "#FF00D0", # Rosa
+    "#FF0000", # Vermelho
     "#A7A7A7", # Cinza
 ]
