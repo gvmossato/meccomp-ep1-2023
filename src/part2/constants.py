@@ -17,7 +17,7 @@ constants = {
 
     # Air
     "V_vals" : np.array([75.0, 100.0, 140.0]) / 3.6, # m/s
-    "rho"    : 1.25,                                 # kg/m^3
+    "rho"    : 1.25,                                 # kg/m3
     "k"      : 0.026,                                # W/(m * K)
     "cp"     : 1002.0,                               # J/(kg * K)
     "gamma" : 1.4,

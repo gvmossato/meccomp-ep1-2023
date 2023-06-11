@@ -488,7 +488,7 @@ class Tunnel:
             abscisses = np.array([n.x for n in nodes])
             ordinates = np.array([n.y for n in nodes])
 
-            # Assumes that x and y distances may not be self.h_x and self.h_y
+            # Assumes that x and y distances may not be self.hx and self.hy
             x_distances = arr_diff(abscisses)
             y_distances = arr_diff(ordinates)
             distances = np.sqrt(x_distances**2 + y_distances**2)
@@ -547,7 +547,7 @@ class Tunnel:
             abscisses = np.array([n.x for n in nodes])
             ordinates = np.array([n.y for n in nodes])
 
-            # Assumes that x and y distances may not be self.h_x and self.h_y
+            # Assumes that x and y distances may not be self.hx and self.hy
             x_distances = arr_diff(abscisses)
             y_distances = arr_diff(ordinates)
             distances = np.sqrt(x_distances**2 + y_distances**2)
